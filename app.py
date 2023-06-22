@@ -23,6 +23,7 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import VotingClassifier
+from sklearn.model_selection import GridSearchCV
 import email.message
 
 
@@ -212,16 +213,16 @@ lg_reg            = LogisticRegression(solver="lbfgs", max_iter=1000, random_sta
 svm_clf           = SVC(gamma='auto')
 ada_clf           = AdaBoostClassifier(n_estimators=100, random_state=42)
 
-# estimators = [
-#     random_forest_clf, 
-#     lg_reg, 
-#     svm_clf, 
-#     ada_clf
-# ]
+estimators = [
+    random_forest_clf, 
+    lg_reg, 
+    svm_clf, 
+    ada_clf
+]
 
-# for estimator in estimators:
-#     print("Training the", estimator)
-#     estimator.fit(X_train_transformed, y_train)
+for estimator in estimators:
+    print("Training the", estimator)
+    estimator.fit(X_train_transformed, y_train)
 
 named_estimators = [
     ("random_forest_clf", random_forest_clf),
@@ -231,11 +232,26 @@ named_estimators = [
 ]
 
 X_test_transformed = preprocess_pipeline.transform(X_test)
-# voting_clf = VotingClassifier(named_estimators)
-# voting_clf.fit(X_train_transformed, y_train)
+voting_clf = VotingClassifier(named_estimators)
+voting_clf.fit(X_train_transformed, y_train)
 
-ada_clf.fit(X_train_transformed, y_train)
-y_pred_adaboost = ada_clf.predict(X_test_transformed)
+
+param_grid = {
+    "n_estimators": [50, 100, 200],
+    "learning_rate": [0.01, 0.1, 1,0.5]
+}
+
+grid_search = GridSearchCV(ada_clf, param_grid, cv=5, scoring="recall", verbose=2)
+grid_search.fit(X_train_transformed, y_train)
+
+print("Best parameters:", grid_search.best_params_)
+print("Best score:", grid_search.best_score_)
+
+y_pred_grid = grid_search.predict(X_test_transformed)
+
+print("Precision: {:.2f}%".format(100 * precision_score(y_test, y_pred_grid)))
+print("Recall: {:.2f}%".format(100 * recall_score(y_test, y_pred_grid)))
+
 
 def create_email(sender, recipient, subject, message):
     email_msg = email.message.EmailMessage()
@@ -266,10 +282,11 @@ def predict():
         data = create_email(sender, recipient, subject, message)
         test = [data]
         test_transformed = preprocess_pipeline.transform(test)
-        prediction = ada_clf.predict(test_transformed)
-        # Calculate recall score
-        y_pred = ada_clf.predict(X_test_transformed)
+        prediction = grid_search.predict(test_transformed)
+
+        y_pred = grid_search.predict(X_test_transformed)
         recall = recall_score(y_test, y_pred) * 100
+        print(recall)
 
     return render_template('result.html',prediction = prediction)
 app.run(debug=True)
